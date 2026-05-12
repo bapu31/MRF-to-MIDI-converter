@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MRF to MIDI Converter</title>
+  <script src="https://cdn.jsdelivr.net/npm/@tonejs/midi@2.0.28/build/Midi.min.js"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #f1f5f9;
+      display: flex;
+      justify-content: center;
+      padding: 40px;
+    }
+    .card {
+      background: white;
+      padding: 30px;
+      border-radius: 16px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+      width: 450px;
+    }
+    h1 { margin-top: 0; }
+    input, button {
+      width: 100%;
+      padding: 12px;
+      margin-top: 10px;
+      border-radius: 8px;
+      border: 1px solid #ccc;
+      box-sizing: border-box;
+    }
+    button {
+      background: black;
+      color: white;
+      border: none;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>MRF to MIDI Converter</h1>
+    <input type="file" id="fileInput" accept=".MRF" />
+    <input type="number" id="timeScale" value="1" min="0.1" placeholder="Time Scale" />
+    <button onclick="convertFile()">Convert & Download MIDI</button>
+  </div>
+
+  <script>
+    async function convertFile() {
+      const file = document.getElementById('fileInput').files[0];
+      const timeScale = parseInt(document.getElementById('timeScale').value) || 1;
+
+      if (!file) {
+        alert('Please select an MRF file');
+        return;
+      }
+
+      const buffer = await file.arrayBuffer();
+      const bytes = new Uint8Array(buffer);
+      const midi = new Midi();
+      const track = midi.addTrack();
+
+      let currentTime = 0;
+
+      for (let i = 0; i < bytes.length - 7; i++) {
+        if (
+          bytes[i] >= 0 && bytes[i] <= 127 &&
+          bytes[i + 1] >= 1 && bytes[i + 1] <= 127 &&
+          (bytes[i + 3] === 0x80 || bytes[i + 3] === 0x81) &&
+          bytes[i + 5] === 0xFE
+        ) {
+          const note = bytes[i];
+          const velocity = bytes[i + 1] / 127;
+          const duration = (bytes[i + 2] + bytes[i + 4] * 2) * timeScale;
+          const delta = bytes[i + 6] * timeScale;
+
+          track.addNote({
+            midi: note,
+            time: currentTime / 100,
+            duration: duration / 100,
+            velocity: velocity
+          });
+
+          currentTime += delta;
+          i += 6;
+        }
+      }
+
+      const blob = new Blob([midi.toArray()], { type: 'audio/midi' });
+      const url = URL.createObjectURL(blob);
+
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = file.name.replace(/\.MRF$/i, '') + '.mid';
+      a.click();
+
+      URL.revokeObjectURL(url);
+    }
+  </script>
+</body>
+</html>
